@@ -410,27 +410,46 @@ void MP2Node::dispatchMessages(Message message){
 /* server side message handlers */
 void MP2Node::processKeyCreate(Message message){
     Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
-    if( createKeyValue(message.key,message.value,message.replica))
+    if( createKeyValue(message.key,message.value,message.replica)){
         reply.success=true;
+        log->logCreateSuccess(&message.fromAddr,&memberNode->addr,message.transID,message.key,message.value);
+    }else{
+        reply.success=false;
+        log->logCreateFail(&message.fromAddr,message.transID);
+    }
     unicastMessage(reply,message.fromAddr);
 }
 void MP2Node::processKeyUpdate(Message message){
     Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
-    if( updateKeyValue(message.key,message.value,message.replica))
+    if( updateKeyValue(message.key,message.value,message.replica)){
         reply.success=true;
+        log->logUpdateSuccess(&message.fromAddr,&memberNode->addr,message.transID,message.key,message.value);
+    }else{
+        reply.success=false;
+        log->logUpdateFail(&message.fromAddr,message.transID);
+    }
     unicastMessage(reply,message.fromAddr);
-
 }
 void MP2Node::processKeyDelete(Message message){
     Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
-    if( deletekey(message.key))
+    if( deletekey(message.key)){
         reply.success=true;
+        log->logDeleteSuccess(&message.fromAddr,&memberNode->addr,message.transID,message.key);
+    }
+    else{
+        reply.success=false;
+        log->logDeleteFail(&message.fromAddr,message.transID);
+    }
     unicastMessage(reply,message.fromAddr);      
 
 }
 /*The Key read message format does not have a separate flag for success*/
 void MP2Node::processKeyRead(Message message){
     string keyval = readKey(message.key);
+    if(!keyval.empty())
+        log->logReadSuccess(&message.fromAddr,&memberNode->addr,message.transID,message.key,message.value);
+    else
+        log->logReadFail(&message.fromAddr,message.transID);
     Message reply(message.transID,(this->memberNode->addr),keyval); 
     unicastMessage(reply,message.fromAddr);
 }
@@ -477,6 +496,7 @@ void MP2Node::processReadReply(Message message){
     else if(--(it->quorum_count)==0){
         //quorum replies received
         //LOG success with the latest val;
+        log->logReadSuccess(&memberNode->addr,&message.fromAddr,message.transID,message.key,it->latest_val.second);
         //delete from translog
         translog.erase(it);
     }else{
@@ -503,6 +523,11 @@ void MP2Node::processReply(Message message){
     }else if(--(it->quorum_count)==0){
         //quorum replies received
         //LOG success with the latest val and for type trans_type;
+        switch(it->trans_type){
+            case MessageType::CREATE: log->logCreateSuccess(&memberNode->addr,&message.fromAddr,message.transID,message.key,it->latest_val.second);break;
+            case MessageType::UPDATE: log->logUpdateSuccess(&memberNode->addr,&message.fromAddr,message.transID,message.key,it->latest_val.second);break;
+            case MessageType::DELETE: log->logDeleteSuccess(&memberNode->addr,&message.fromAddr,message.transID,message.key);break;
+        }
         //delete from translog
         translog.erase(it);
     }else{
