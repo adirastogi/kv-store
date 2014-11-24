@@ -34,15 +34,15 @@ public:
 	void logNodeAdd(Address *, Address *);
 	void logNodeRemove(Address *, Address *);
 	// success
-	void logCreateSuccess(Address * coordinator, Address * server, int transID, string key, string value);
-	void logReadSuccess(Address * coordinator, Address * server, int transID, string key, string value);
-	void logUpdateSuccess(Address * coordinator, Address * server, int transID, string key, string new_value);
-	void logDeleteSuccess(Address * coordinator, Address * server, int transID, string key);
+	void logCreateSuccess(Address * address, bool isCoordinator, int transID, string key, string value);
+	void logReadSuccess(Address * address, bool isCoordinator, int transID, string key, string value);
+	void logUpdateSuccess(Address * address, bool isCoordinator, int transID, string key, string newValue);
+	void logDeleteSuccess(Address * address, bool isCoordinator, int transID, string key);
 	// fail
-	void logCreateFail(Address * coordinator, int transID);
-	void logReadFail(Address * coordinator, int transID);
-	void logUpdateFail(Address * coordinator, int transID);
-	void logDeleteFail(Address * coordinator, int transID);
+	void logCreateFail(Address * address, bool isCoordinator, int transID, string key, string value);
+	void logReadFail(Address * address, bool isCoordinator, int transID, string key);
+	void logUpdateFail(Address * address, bool isCoordinator, int transID, string key, string newValue);
+	void logDeleteFail(Address * address, bool isCoordinator, int transID, string key);
 };
 
 #endif /* _LOG_H_ */

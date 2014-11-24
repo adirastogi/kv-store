@@ -257,7 +257,7 @@ void MP1Node::processJoinReq(void *env, char *data, int size) {
     Address newaddr;
     long heartbeat;
     memcpy(newaddr.addr, data, sizeof(newaddr.addr));
-    memcpy(&heartbeat, data+sizeof(newaddr.addr), sizeof(long));
+    memcpy(&heartbeat, data+1+sizeof(newaddr.addr), sizeof(long));
 
     int id = *(int*)(&newaddr.addr);
     short port = *(short*)(&newaddr.addr[4]);
