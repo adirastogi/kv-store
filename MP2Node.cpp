@@ -51,6 +51,8 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
+    /* right now create the ring as a copy of the sorted member list */
+    ring = curMemList; 
 
 
 	/*
@@ -111,6 +113,14 @@ void MP2Node::clientCreate(string key, string value) {
 	/*
 	 * Implement this
 	 */
+    g_transID++;
+    Message createMsg(g_transID,this->memberNode->addr,MessageType::READ,key,value);
+    /*Store the transaction ID in your list*/
+    transaction tr(g_transID,par->getcurrtime(),QUORUM_COUNT,MessageType::CREATE,value);
+    translog.push_front(tr);
+    vector<Node> recipients = findNodes(key);
+    multicastMessage(createMsg,recipients);
+    
 }
 
 /**
@@ -126,6 +136,13 @@ void MP2Node::clientRead(string key){
 	/*
 	 * Implement this
 	 */
+    g_transID++;
+    Message createMsg(g_transID,this->memberNode->addr,MessageType::READ,key);
+    /*Store the transaction ID in your list*/
+    transaction tr(g_transID,par->getcurrtime(),QUORUM_COUNT,MessageType::READ,"");
+    translog.push_front(tr);
+    vector<Node> recipients = findNodes(key);
+    multicastMessage(createMsg,recipients);
 }
 
 /**
@@ -141,6 +158,19 @@ void MP2Node::clientUpdate(string key, string value){
 	/*
 	 * Implement this
 	 */
+    g_transID++;
+    vector<Node> recipients = findNodes(key);
+    assert(recipients.size()==NUM_KEY_REPLICAS);
+    Address* sendaddr = &(this->memberNode->addr);
+    for (int i=0;i<NUM_KEY_REPLICAS;++i){
+        Message createMsg(g_transID,this->memberNode->addr,MessageType::UPDATE,key,value,static_cast<ReplicaType>(i));
+        const char * msgstr = createMsg.toString().c_str();
+        size_t msglen = strlen(msgstr)+1;
+        this->emulNet->ENsend(sendaddr,&(recipients[i].nodeAddress),(char*)msgstr,msglen);       
+    }
+    /*Store the transaction ID in your list*/
+    transaction tr(g_transID,par->getcurrtime(),QUORUM_COUNT,MessageType::UPDATE,value);
+    translog.push_front(tr);
 }
 
 /**
@@ -156,6 +186,13 @@ void MP2Node::clientDelete(string key){
 	/*
 	 * Implement this
 	 */
+    g_transID++;
+    Message createMsg(g_transID,this->memberNode->addr,MessageType::DELETE,key);
+    /*Store the transaction ID in your list*/
+    transaction tr(g_transID,par->getcurrtime(),QUORUM_COUNT,MessageType::DELETE,"");
+    translog.push_front(tr);
+    vector<Node> recipients = findNodes(key);
+    multicastMessage(createMsg,recipients);
 }
 
 /**
@@ -171,6 +208,10 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Insert key, value, replicaType into the hash table
+    Entry e(value,par->getcurrtime(),replica);
+    keymap.insert(pair<string,Entry>(key,e));
+    return true;
+    
 }
 
 /**
@@ -186,6 +227,10 @@ string MP2Node::readKey(string key) {
 	 * Implement this
 	 */
 	// Read key from local hash table and return value
+    KeyMap::iterator it;
+    if ((it=keymap.find(key))!=keymap.end())
+        return it->second.convertToString();  
+    else return "";
 }
 
 /**
@@ -201,6 +246,12 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Update key in local hash table and return true or false
+    Entry e(value,par->getcurrtime(),replica);
+    KeyMap::iterator it;
+    if ((it=keymap.find(key))!=keymap.end()){
+        keymap.insert(pair<string,Entry>(key,e));
+        return true;
+    }else return false;
 }
 
 /**
@@ -216,6 +267,8 @@ bool MP2Node::deletekey(string key) {
 	 * Implement this
 	 */
 	// Delete the key from the local hash table
+    if(keymap.erase(key)) return true;
+    else return false;
 }
 
 /**
@@ -251,6 +304,8 @@ void MP2Node::checkMessages() {
 		/*
 		 * Handle the message types here
 		 */
+        Message msg(message);
+        dispatchMessages(message);
 
 	}
 
@@ -292,6 +347,24 @@ vector<Node> MP2Node::findNodes(string key) {
 	return addr_vec;
 }
 
+void MP2Node::updateTransactionLog(){
+
+    list<transaction>::iterator it=translog.begin();
+    while(it!=translog.end())
+        if((par->getcurrtime()-it->local_ts)>RESPONSE_WAIT_TIME) {
+                MessageType mtype = it->trans_type;
+                int transid = it->gtransID;
+                switch(mtype){
+                    case MessageType::CREATE: log->logCreateFail(&memberNode->addr,transid);break;
+                    case MessageType::UPDATE: log->logUpdateFail(&memberNode->addr,transid);break;
+                    case MessageType::READ: log->logReadFail(&memberNode->addr,transid);break;
+                    case MessageType::DELETE: log->logDeleteFail(&memberNode->addr,transid);break;
+                }
+                translog.erase(it++);
+        }else it++;
+    
+}
+
 /**
  * FUNCTION NAME: recvLoop
  *
@@ -302,6 +375,8 @@ bool MP2Node::recvLoop() {
     	return false;
     }
     else {
+        /*Update the timeout counters on the transaction log*/
+        updateTransactionLog();
     	return emulNet->ENrecv(&(memberNode->addr), this->enqueueWrapper, NULL, 1, &(memberNode->mp2q));
     }
 }
@@ -314,6 +389,144 @@ bool MP2Node::recvLoop() {
 int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
 	Queue q;
 	return q.enqueue((queue<q_elt> *)env, (void *)buff, size);
+}
+/* Handles the message type and sends it to the appropriate handler */
+void MP2Node::dispatchMessages(Message message){
+    switch(message.type){
+        /* server side message types */
+        case MessageType::CREATE: processKeyCreate(message);break;
+        case MessageType::UPDATE: processKeyUpdate(message);break;
+        case MessageType::DELETE: processKeyDelete(message);break;
+        case MessageType::READ: processKeyRead(message);break;
+
+        /* client side message types */
+        /* reply message to read requests*/
+        case MessageType::READREPLY: processReadReply(message);break;
+        /* generic REPLY message (sent/recived in response to CREATE , READ , DELETE requests */ 
+        case MessageType::REPLY: processReply(message);break;
+    }  
+}
+
+/* server side message handlers */
+void MP2Node::processKeyCreate(Message message){
+    Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
+    if( createKeyValue(message.key,message.value,message.replica))
+        reply.success=true;
+    unicastMessage(reply,message.fromAddr);
+}
+void MP2Node::processKeyUpdate(Message message){
+    Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
+    if( updateKeyValue(message.key,message.value,message.replica))
+        reply.success=true;
+    unicastMessage(reply,message.fromAddr);
+
+}
+void MP2Node::processKeyDelete(Message message){
+    Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
+    if( deletekey(message.key))
+        reply.success=true;
+    unicastMessage(reply,message.fromAddr);      
+
+}
+/*The Key read message format does not have a separate flag for success*/
+void MP2Node::processKeyRead(Message message){
+    string keyval = readKey(message.key);
+    Message reply(message.transID,(this->memberNode->addr),keyval); 
+    unicastMessage(reply,message.fromAddr);
+}
+
+/* client side message handlers */
+/* Process the reply recieved in response to a read request*/
+void MP2Node::processReadReply(Message message){
+    /* over here, match the reply with the transaction id , and keep
+    count of the replies received . if quorum is reached then log the reply,
+    else just decrement the quorum counter. 
+    There may be a conflict in the returned values , some may be older.
+    Ideally the reply with the latest global timestamp should be returned
+    */
+    string value = message.value;
+    //split the value to extract the actual value , timestamp and the replica type
+    string delim = ":";
+    vector<string> tuple;
+    int start = 0;
+    int pos = 0;
+    while((pos=value.find(delim))!=string::npos){
+        string token = value.substr(start,pos-start);
+        tuple.push_back(token);
+        start = pos+1;
+    }
+    assert(tuple.size()==3);
+    string keyval = tuple[0];
+    int timestamp = stoi(tuple[0]);
+    ReplicaType repType = static_cast<ReplicaType>(stoi(tuple[2]));
+    int transid = message.transID;
+    list<transaction>::iterator it;
+    for (it = translog.begin(); it!=translog.end();++it)
+        if(it->gtransID==transid)
+            break;
+    
+    //now we have for the key, its value and the info wheter the reply came
+    //from a primary,secondary copy
+    //not sure what to do with the replica for now
+    if(it==translog.end()){
+        //The reply has come in too late and the transaction has been dropped
+        //from the log. ignore the reply.
+    }else if(keyval.empty()){
+        //If the node did not have the key there's nothing you can do about it
+    }
+    else if(--(it->quorum_count)==0){
+        //quorum replies received
+        //LOG success with the latest val;
+        //delete from translog
+        translog.erase(it);
+    }else{
+        //LOG reply
+        //safety, as the reply must come after the request
+        assert(timestamp>=it->latest_val.first);
+        if(timestamp>=it->latest_val.first)
+            it->latest_val = pair<int,string>(timestamp,keyval);
+    }
+
+}
+/* reply received in response to create, read and update queries */
+void MP2Node::processReply(Message message){
+    int transid = message.transID;
+    list<transaction>::iterator it;
+    for (it = translog.begin(); it!=translog.end();++it)
+        if(it->gtransID==transid)
+            break;
+    if(it==translog.end()) {
+        //The reply has come in too late and the transaction has been dropped
+        //from the log. ignore the reply.
+    }else if(!message.success){
+        //no luck!
+    }else if(--(it->quorum_count)==0){
+        //quorum replies received
+        //LOG success with the latest val and for type trans_type;
+        //delete from translog
+        translog.erase(it);
+    }else{
+        //LOG reply
+        //safety, as the reply must come after the request
+    }
+}
+
+
+/* Send a multicast message about a CRUD operation to all nodes */
+void MP2Node::multicastMessage(Message message,vector<Node>& recipients){
+
+    Address* sendaddr = &(this->memberNode->addr);
+    char * msgstr = (char*)message.toString().c_str();
+    size_t msglen = strlen(msgstr)+1;
+    for (size_t i=0;i<recipients.size();++i)
+        this->emulNet->ENsend(sendaddr,&(recipients[i].nodeAddress),msgstr,msglen);       
+}
+
+void MP2Node::unicastMessage(Message message,Address& toaddr){
+    char * msgstr = (char*)message.toString().c_str();
+    size_t msglen = strlen(msgstr)+1;
+    Address* sendaddr = &(this->memberNode->addr);
+    this->emulNet->ENsend(sendaddr,&toaddr,msgstr,msglen);       
 }
 /**
  * FUNCTION NAME: stabilizationProtocol

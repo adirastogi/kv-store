@@ -18,7 +18,11 @@
 #include "Params.h"
 #include "Message.h"
 #include "Queue.h"
+#include <list>
 
+#define NUM_KEY_REPLICAS 3
+#define QUORUM_COUNT ((NUM_KEY_REPLICAS)/2+1)
+#define RESPONSE_WAIT_TIME 20
 /**
  * CLASS NAME: MP2Node
  *
@@ -29,6 +33,21 @@
  * 				3) Server side CRUD APIs
  * 				4) Client side CRUD APIs
  */
+
+/* Custom class implementations that will be used in MP2Node*/
+struct transaction{
+    public:
+    int gtransID;       //globally unique transaction ID
+    int local_ts;      //local TS at node when transaction was initiated
+    int quorum_count;   //represents the numeber of nodes need to achieve quorum
+    MessageType trans_type; //type of transaction requested
+    pair<int,string> latest_val; //value of the key received with the latest timestamp.
+    transaction(int tid, int lts, int qc, MessageType ttype,string value):gtransID(tid),local_ts(lts),quorum_count(qc),trans_type(ttype),latest_val(lts,value){
+    } 
+};
+typedef std::map<string,Entry> KeyMap;
+/* Custom class implementations that will be used in MP2Node*/
+
 class MP2Node {
 private:
 	// Vector holding the next two neighbors in the ring who have my replicas
@@ -47,6 +66,28 @@ private:
 	EmulNet * emulNet;
 	// Object of Log
 	Log * log;
+
+    //Transaction Log
+    list<transaction> translog;
+    //Custom KeyMap
+    KeyMap keymap;
+
+    /* server side message handlers */
+    void processKeyCreate(Message message);
+    void processKeyUpdate(Message message);
+    void processKeyDelete(Message message);
+    void processKeyRead(Message message);
+
+    /* client side message handlers */
+    void processReadReply(Message message);
+    void processReply(Message message);
+
+    /* Util functions for sending messages */
+    void unicastMessage(Message message,Address& toaddr);
+    void multicastMessage(Message message,vector<Node>& recp);
+    
+    /* for checking for transaction timeouts*/
+    void updateTransactionLog();
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
