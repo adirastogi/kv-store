@@ -34,6 +34,16 @@
  * 				4) Client side CRUD APIs
  */
 
+class MyMessage:public Message{
+    public:
+    enum MyMessageType{ REPLICATE,REPUPDATE,STOPREPLICATE,QUERY };
+    MyMessage(string message);
+    MyMessage(MyMessageType mType,string normalMsg);
+    MyMessage(MyMessageType mType,Message normalMsg);
+    string toString();
+    static string stripMyHeader(string message); 
+    MyMessageType msgType;
+};
 
 /* Custom class implementations that will be used in MP2Node*/
 struct transaction{
@@ -91,11 +101,16 @@ private:
     void processReply(Message message);
 
     /* Util functions for sending messages */
-    void unicastMessage(Message message,Address& toaddr);
-    void multicastMessage(Message message,vector<Node>& recp);
+    void unicastMessage(MyMessage message,Address& toaddr);
+    void multicastMessage(MyMessage message,vector<Node>& recp);
     
     /* for checking for transaction timeouts*/
     void updateTransactionLog();
+
+    /*event handlers for stabilization protocol*/
+    void processReplicate(MyMessage msg);
+    void processReplicaUpdate(MyMessage msg);
+    void processStopReplicate(MyMessage msg);
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
@@ -123,7 +138,7 @@ public:
 	void checkMessages();
 
 	// coordinator dispatches messages to corresponding nodes
-	void dispatchMessages(Message message);
+	void dispatchMessages(MyMessage message);
 
 	// find the addresses of nodes that are responsible for a key
 	vector<Node> findNodes(string key);

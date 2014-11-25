@@ -9,6 +9,25 @@ static int debug = 0;
 #define mylog(fmt,...)  if(debug) log->LOG(&(memberNode->addr),fmt,__VA_ARGS__);
 
 
+/* Definitons of the custom message wrapper */
+string MyMessage::stripMyHeader(string message){ 
+    /*Strip the custom header from the message and return the rest */
+    int pos = message.find('@');
+    return message.substr(pos+1);
+}
+MyMessage::MyMessage(string message):Message(MyMessage::stripMyHeader(message)){
+    int  header = stoi(message.substr(0,message.find('@'))); 
+    msgType = static_cast<MyMessageType>(header);
+}
+MyMessage::MyMessage(MyMessage::MyMessageType mt, string normalMsg):Message(normalMsg),msgType(mt){
+}
+MyMessage::MyMessage(MyMessage::MyMessageType mt, Message normalMsg):Message(normalMsg),msgType(mt){
+}
+string MyMessage::toString(){
+    return to_string(msgType) + '@' + Message::toString();
+}
+
+
 /**
  * constructor
  */
@@ -122,7 +141,7 @@ void MP2Node::clientCreate(string key, string value) {
     assert(recipients.size()==NUM_KEY_REPLICAS);
     Address* sendaddr = &(this->memberNode->addr);
     for (int i=0;i<NUM_KEY_REPLICAS;++i){
-        Message createMsg(g_transID,this->memberNode->addr,MessageType::CREATE,key,value,static_cast<ReplicaType>(i));
+        MyMessage createMsg(MyMessage::QUERY,Message(g_transID,this->memberNode->addr,MessageType::CREATE,key,value,static_cast<ReplicaType>(i)));
         unicastMessage(createMsg,recipients[i].nodeAddress);
     } 
     /*Store the transaction ID in your list*/
@@ -144,7 +163,7 @@ void MP2Node::clientRead(string key){
 	 * Implement this
 	 */
     g_transID++;
-    Message createMsg(g_transID,this->memberNode->addr,MessageType::READ,key);
+    MyMessage createMsg(MyMessage::QUERY,Message(g_transID,this->memberNode->addr,MessageType::READ,key));
     /*Store the transaction ID in your list*/
     transaction tr(g_transID,par->getcurrtime(),QUORUM_COUNT,MessageType::READ,key,"");
     translog.push_front(tr);
@@ -170,7 +189,7 @@ void MP2Node::clientUpdate(string key, string value){
     assert(recipients.size()==NUM_KEY_REPLICAS);
     Address* sendaddr = &(this->memberNode->addr);
     for (int i=0;i<NUM_KEY_REPLICAS;++i){
-        Message createMsg(g_transID,this->memberNode->addr,MessageType::UPDATE,key,value,static_cast<ReplicaType>(i));
+        MyMessage createMsg(MyMessage::QUERY,Message(g_transID,this->memberNode->addr,MessageType::UPDATE,key,value,static_cast<ReplicaType>(i)));
         unicastMessage(createMsg,recipients[i].nodeAddress);
     }
     /*Store the transaction ID in your list*/
@@ -191,8 +210,10 @@ void MP2Node::clientDelete(string key){
 	/*
 	 * Implement this
 	 */
+    if (key=="invalidKey")
+        mylog("Got and invalid key client %s","key");
     g_transID++;
-    Message createMsg(g_transID,this->memberNode->addr,MessageType::DELETE,key);
+    MyMessage createMsg(MyMessage::QUERY,Message(g_transID,this->memberNode->addr,MessageType::DELETE,key));
     /*Store the transaction ID in your list*/
     transaction tr(g_transID,par->getcurrtime(),QUORUM_COUNT,MessageType::DELETE,key,"");
     translog.push_front(tr);
@@ -305,12 +326,12 @@ void MP2Node::checkMessages() {
 		memberNode->mp2q.pop();
 
 		string message(data, data + size);
-        mylog("got the message :%s",message.c_str());
+        mylog("got the message :%s",data);
 
 		/*
 		 * Handle the message types here
 		 */
-        Message msg(message);
+        MyMessage msg(message);
         dispatchMessages(msg);
 
 	}
@@ -352,6 +373,7 @@ vector<Node> MP2Node::findNodes(string key) {
 	}
 	return addr_vec;
 }
+
 
 void MP2Node::updateTransactionLog(){
 
@@ -398,25 +420,50 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
 	return q.enqueue((queue<q_elt> *)env, (void *)buff, size);
 }
 /* Handles the message type and sends it to the appropriate handler */
-void MP2Node::dispatchMessages(Message message){
-    switch(message.type){
-        /* server side message types */
-        case MessageType::CREATE: processKeyCreate(message);break;
-        case MessageType::UPDATE: processKeyUpdate(message);break;
-        case MessageType::DELETE: processKeyDelete(message);break;
-        case MessageType::READ: processKeyRead(message);break;
+void MP2Node::dispatchMessages(MyMessage message){
+    if(message.msgType==MyMessage::QUERY){
+        switch(message.type){
+            /* server side message types */
+            case MessageType::CREATE: processKeyCreate(message);break;
+            case MessageType::UPDATE: processKeyUpdate(message);break;
+            case MessageType::DELETE: processKeyDelete(message);break;
+            case MessageType::READ: processKeyRead(message);break;
 
-        /* client side message types */
-        /* reply message to read requests*/
-        case MessageType::READREPLY: processReadReply(message);break;
-        /* generic REPLY message (sent/recived in response to CREATE , READ , DELETE requests */ 
-        case MessageType::REPLY: processReply(message);break;
-    }  
+            /* client side message types */
+            /* reply message to read requests*/
+            case MessageType::READREPLY: processReadReply(message);break;
+            /* generic REPLY message (sent/recived in response to CREATE , READ , DELETE requests */ 
+            case MessageType::REPLY: processReply(message);break;
+        }  
+    }else if(message.msgType==MyMessage::REPLICATE)
+        processReplicate(message);
+    else if(message.msgType==MyMessage::REPUPDATE)
+        processReplicaUpdate(message);
+    else if(message.msgType==MyMessage::STOPREPLICATE)
+        processStopReplicate(message);
+    else{
+        /*message type is unkown, do nothign*/
+        mylog("Dropping corrupted packet %s",message.toString().c_str());
+        return;  
+    }
 }
+
+
+/*Stabilization process message handlers */
+void MP2Node::processReplicate(MyMessage msg){
+    
+}
+void MP2Node::processReplicaUpdate(MyMessage msg){
+}
+void MP2Node::processStopReplicate(MyMessage msg){
+
+}
+
+
 
 /* server side message handlers */
 void MP2Node::processKeyCreate(Message message){
-    Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
+    MyMessage reply(MyMessage::QUERY,Message(message.transID,(this->memberNode->addr),MessageType::REPLY,false)); 
     if( createKeyValue(message.key,message.value,message.replica)){
         reply.success=true;
         mylog("create server node with replica %d for key %s",message.replica,message.key.c_str());
@@ -428,7 +475,7 @@ void MP2Node::processKeyCreate(Message message){
     unicastMessage(reply,message.fromAddr);
 }
 void MP2Node::processKeyUpdate(Message message){
-    Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
+    MyMessage reply(MyMessage::QUERY,Message(message.transID,(this->memberNode->addr),MessageType::REPLY,false)); 
     if( updateKeyValue(message.key,message.value,message.replica)){
         reply.success=true;
         mylog("update server node with replica %d for key %s",message.replica,message.key.c_str());
@@ -440,7 +487,7 @@ void MP2Node::processKeyUpdate(Message message){
     unicastMessage(reply,message.fromAddr);
 }
 void MP2Node::processKeyDelete(Message message){
-    Message reply(message.transID,(this->memberNode->addr),MessageType::REPLY,false); 
+    MyMessage reply(MyMessage::QUERY,Message(message.transID,(this->memberNode->addr),MessageType::REPLY,false)); 
     if( deletekey(message.key)){
         reply.success=true;
         mylog("delete server node with replica %d for key %s",message.replica,message.key.c_str());
@@ -462,7 +509,7 @@ void MP2Node::processKeyRead(Message message){
     }else{
         log->logReadFail(&memberNode->addr,false,message.transID,message.key);
     }
-    Message reply(message.transID,(this->memberNode->addr),keyval); 
+    MyMessage reply(MyMessage::QUERY,Message(message.transID,(this->memberNode->addr),keyval)); 
     unicastMessage(reply,message.fromAddr);
 }
 
@@ -557,21 +604,23 @@ void MP2Node::processReply(Message message){
 
 
 /* Send a multicast message about a CRUD operation to all nodes */
-void MP2Node::multicastMessage(Message message,vector<Node>& recipients){
+void MP2Node::multicastMessage(MyMessage message,vector<Node>& recipients){
 
     Address* sendaddr = &(this->memberNode->addr);
-    char * msgstr = (char*)message.toString().c_str();
+    string strrep = message.toString();
+    char * msgstr = (char*)strrep.c_str();
     size_t msglen = strlen(msgstr);
-    mylog("Sending the client request : %s",msgstr);
+    mylog("Sending the client request : %s of length %d",msgstr,msglen);
     for (size_t i=0;i<recipients.size();++i)
         this->emulNet->ENsend(sendaddr,&(recipients[i].nodeAddress),msgstr,msglen);       
 }
 
-void MP2Node::unicastMessage(Message message,Address& toaddr){
-    char * msgstr = (char*)message.toString().c_str();
-    size_t msglen = strlen(msgstr);
+void MP2Node::unicastMessage(MyMessage message,Address& toaddr){
     Address* sendaddr = &(this->memberNode->addr);
-    mylog("Sending the client request : %s",msgstr);
+    string strrep = message.toString();
+    char * msgstr = (char*)strrep.c_str();
+    size_t msglen = strlen(msgstr);
+    mylog("Sending the client request : %s  of length %d",msgstr,msglen);
     this->emulNet->ENsend(sendaddr,&toaddr,msgstr,msglen);       
 }
 /**
@@ -587,4 +636,6 @@ void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
+    /* Stabilization needed for the case when a Node dies. When a node dies then its key 
+    must be replicated on the immediate successor and predecessor in the list ? */
 }
