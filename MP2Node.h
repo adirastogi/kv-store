@@ -34,6 +34,7 @@
  * 				4) Client side CRUD APIs
  */
 
+
 /* Custom class implementations that will be used in MP2Node*/
 struct transaction{
     public:
@@ -41,8 +42,15 @@ struct transaction{
     int local_ts;      //local TS at node when transaction was initiated
     int quorum_count;   //represents the numeber of nodes need to achieve quorum
     MessageType trans_type; //type of transaction requested
+    string key;         //the key associated with the transaction
     pair<int,string> latest_val; //value of the key received with the latest timestamp.
-    transaction(int tid, int lts, int qc, MessageType ttype,string value):gtransID(tid),local_ts(lts),quorum_count(qc),trans_type(ttype),latest_val(lts,value){
+    transaction(int tid, int lts, int qc, MessageType ttype,string k,string value):
+    gtransID(tid),
+    local_ts(lts),
+    quorum_count(qc),
+    trans_type(ttype),
+    key(k),
+    latest_val(0,value){
     } 
 };
 typedef std::map<string,Entry> KeyMap;
