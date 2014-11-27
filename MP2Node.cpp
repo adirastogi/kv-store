@@ -38,6 +38,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->log = log;
 	ht = new HashTable();
 	this->memberNode->addr = *address;
+    this->inited = false;
 }
 
 /**
@@ -63,7 +64,6 @@ void MP2Node::updateRing() {
 	 */
 	vector<Node> curMemList;
 	bool change = false;
-
 	/*
 	 *  Step 1. Get the current membership list from Membership Protocol / MP1
 	 */
@@ -76,12 +76,11 @@ void MP2Node::updateRing() {
 	sort(curMemList.begin(), curMemList.end());
     /* right now create the ring as a copy of the sorted member list */
     ring = curMemList; 
-
-
+    /*Check the status of replicas relative to your position in the ring */
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
-	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+    stabilizationProtocol(); 
 }
 
 /**
@@ -434,33 +433,30 @@ void MP2Node::dispatchMessages(MyMessage message){
             case MessageType::READREPLY: processReadReply(message);break;
             /* generic REPLY message (sent/recived in response to CREATE , READ , DELETE requests */ 
             case MessageType::REPLY: processReply(message);break;
-        }  
-    }else if(message.msgType==MyMessage::REPLICATE)
-        processReplicate(message);
-    else if(message.msgType==MyMessage::REPUPDATE)
+        }
+    }else if(message.msgType==MyMessage::REPUPDATE)
         processReplicaUpdate(message);
-    else if(message.msgType==MyMessage::STOPREPLICATE)
-        processStopReplicate(message);
     else{
         /*message type is unkown, do nothign*/
         mylog("Dropping corrupted packet %s",message.toString().c_str());
         return;  
     }
 }
-
-
 /*Stabilization process message handlers */
-void MP2Node::processReplicate(MyMessage msg){
-    
+void MP2Node::processReplicate(Node toNode, ReplicaType repType){
+    //push out these keys to the node as a replicate message
+    KeyMap::iterator it;
+    for(it=keymap.begin();it!=keymap.end();++it){
+        if(it->second.replica==repType){
+            MyMessage keyupdate(MyMessage::REPUPDATE,Message(-1,(memberNode->addr),MessageType::CREATE,it->first,it->second.value,ReplicaType::TERTIARY));
+            unicastMessage(keyupdate,toNode.nodeAddress);
+        }
+    }
 }
-void MP2Node::processReplicaUpdate(MyMessage msg){
+void MP2Node::processReplicaUpdate(Message message){
+    /*Add the key to the map withe desired key type buffer*/
+    createKeyValue(message.key,message.value,message.replica);
 }
-void MP2Node::processStopReplicate(MyMessage msg){
-
-}
-
-
-
 /* server side message handlers */
 void MP2Node::processKeyCreate(Message message){
     MyMessage reply(MyMessage::QUERY,Message(message.transID,(this->memberNode->addr),MessageType::REPLY,false)); 
@@ -638,4 +634,54 @@ void MP2Node::stabilizationProtocol() {
 	 */
     /* Stabilization needed for the case when a Node dies. When a node dies then its key 
     must be replicated on the immediate successor and predecessor in the list ? */
+    int i=0;
+    for (i=0;i<ring.size();++i){
+        if((ring[i].nodeAddress==this->memberNode->addr))
+         break;
+    }
+    
+    /* Initialize the list of neighbours*/
+    int p_2 = ((i-2)<0?i-2+ring.size():i-2)%ring.size();
+    int p_1 = ((i-1)<0?i-1+ring.size():i-2)%ring.size() ;
+    int n_1 = (i+1)%ring.size();
+    int n_2 = (i+2)%ring.size();
+    if(!inited){
+        mylog("Created the member tables initially at ring pos %s",ring[i].nodeAddress.getAddress().c_str());
+        haveReplicasOf.push_back(ring[p_2]);
+        haveReplicasOf.push_back(ring[p_1]);
+        hasMyReplicas.push_back(ring[n_1]);
+        hasMyReplicas.push_back(ring[n_2]);
+        inited = true;
+    }else{
+        /*Just another invocation of the event update*/
+        mylog("Created the neighbours, position values are %s,%s,<%s>,%s,%s",
+        ring[p_2].nodeAddress.getAddress().c_str(),
+        ring[p_1].nodeAddress.getAddress().c_str(),
+        ring[i].nodeAddress.getAddress().c_str(),
+        ring[n_1].nodeAddress.getAddress().c_str(),
+        ring[n_2].nodeAddress.getAddress().c_str());
+        Node n1 = ring[n_1]; //next node in the ring
+        Node n2 = ring[n_2]; //next to next node in the ring
+        Node n3 = ring[p_1]; //previous node in the ring
+        if(!(n1.nodeAddress==hasMyReplicas[0].nodeAddress)){
+            //The next node in the ring failed, send primary to tertiary of next to next node n2
+            processReplicate(n2,ReplicaType::PRIMARY);
+        }else if(!(n2.nodeAddress==hasMyReplicas[1].nodeAddress)){
+            //The next to next node in the ring failed, send primary to tertiary of next to next node n2
+            processReplicate(n2,ReplicaType::PRIMARY);
+        }else if(!(n3.nodeAddress==haveReplicasOf[0].nodeAddress)){
+            //The node previous to this node failed, send secondary to tertiary of the next to next node n2
+            processReplicate(n2,ReplicaType::SECONDARY);
+        }else{
+            //not bothered about processing a change
+        }
+        //update the has-have tables
+        haveReplicasOf.clear();
+        hasMyReplicas.clear();
+        haveReplicasOf.push_back(ring[p_2]);
+        haveReplicasOf.push_back(ring[p_1]);
+        hasMyReplicas.push_back(ring[n_1]);
+        hasMyReplicas.push_back(ring[n_2]);
+    }
+
 }

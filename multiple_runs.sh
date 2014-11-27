@@ -1,0 +1,11 @@
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file
+./KVStoreGrader.sh >> log.file

@@ -36,7 +36,7 @@
 
 class MyMessage:public Message{
     public:
-    enum MyMessageType{ REPLICATE,REPUPDATE,STOPREPLICATE,QUERY };
+    enum MyMessageType{ REPUPDATE,QUERY };
     MyMessage(string message);
     MyMessage(MyMessageType mType,string normalMsg);
     MyMessage(MyMessageType mType,Message normalMsg);
@@ -90,6 +90,9 @@ private:
     //Custom KeyMap
     KeyMap keymap;
 
+    //first time init
+    bool inited ;
+
     /* server side message handlers */
     void processKeyCreate(Message message);
     void processKeyUpdate(Message message);
@@ -108,9 +111,8 @@ private:
     void updateTransactionLog();
 
     /*event handlers for stabilization protocol*/
-    void processReplicate(MyMessage msg);
-    void processReplicaUpdate(MyMessage msg);
-    void processStopReplicate(MyMessage msg);
+    void processReplicate(Node toNode, ReplicaType rType);
+    void processReplicaUpdate(Message msg);
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
