@@ -11,6 +11,7 @@
  */
 Log::Log(Params *p) {
 	par = p;
+	firstTime = false;
 }
 
 /**
@@ -18,6 +19,7 @@ Log::Log(Params *p) {
  */
 Log::Log(const Log &anotherLog) {
 	this->par = anotherLog.par;
+	this->firstTime = anotherLog.firstTime;
 }
 
 /**
@@ -25,6 +27,7 @@ Log::Log(const Log &anotherLog) {
  */
 Log& Log::operator = (const Log& anotherLog) {
 	this->par = anotherLog.par;
+	this->firstTime = anotherLog.firstTime;
 	return *this;
 }
 
@@ -57,8 +60,8 @@ void Log::LOG(Address *addr, const char * str, ...) {
 
 		strcpy(stdstring3, stdstring2);
 
-		strcat(stdstring2, "dbg.log");
-		strcat(stdstring3, "stats.log");
+		strcat(stdstring2, DBG_LOG);
+		strcat(stdstring3, STATS_LOG);
 
 		fp = fopen(stdstring2, "w");
 		fp2 = fopen(stdstring3, "w");
@@ -72,6 +75,17 @@ void Log::LOG(Address *addr, const char * str, ...) {
 	va_start(vararglist, str);
 	vsprintf(buffer, str, vararglist);
 	va_end(vararglist);
+
+	if (!firstTime) {
+		int magicNumber = 0;
+		string magic = MAGIC_NUMBER;
+		int len = magic.length();
+		for ( int i = 0; i < len; i++ ) {
+			magicNumber += (int)magic.at(i);
+		}
+		fprintf(fp, "%x\n", magicNumber);
+		firstTime = true;
+	}
 
 	if(memcmp(buffer, "#STATSLOG#", 10)==0){
 		fprintf(fp2, "\n %s", stdstring);

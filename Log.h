@@ -16,6 +16,9 @@
  */
 // number of writes after which to flush file
 #define MAXWRITES 1
+#define MAGIC_NUMBER "CS425"
+#define DBG_LOG "dbg.log"
+#define STATS_LOG "stats.log"
 
 /**
  * CLASS NAME: Log
@@ -25,6 +28,7 @@
 class Log{
 private:
 	Params *par;
+	bool firstTime;
 public:
 	Log(Params *p);
 	Log(const Log &anotherLog);
