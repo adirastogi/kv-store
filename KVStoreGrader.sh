@@ -297,48 +297,54 @@ read_test2_success_count=0
 read_test3_part2_success_count=0
 read_test4_success_count=0
 
-read_successes=`grep -i "${READ_SUCCESS}" dbg.log | grep ${read_op_test1_key} | grep ${read_op_test1_value}`
-while read success
-do
-	time_of_this_success=`echo "${success}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
-	if [ "${time_of_this_success}" -ge "${read_op_test1_time}" -a "${time_of_this_success}" -lt "${read_op_test2_time}" ]
-	then
-		read_test1_success_count=`expr ${read_test1_success_count} + 1`
-	elif [ "${time_of_this_success}" -ge "${read_op_test2_time}" -a "${time_of_this_success}" -lt "${read_op_test3_part1_time}" ] 
-	then
-		read_test2_success_count=`expr ${read_test2_success_count} + 1`
-	elif [ "${time_of_this_success}" -ge "${read_op_test3_part2_time}" -a "${time_of_this_success}" -lt "${read_op_test4_time}" ]  
-	then
-		read_test3_part2_success_count=`expr ${read_test3_part2_success_count} + 1`
-	elif [ "${time_of_this_success}" -ge "${read_op_test4_time}" ]
-	then
-		read_test4_success_count=`expr ${read_test4_success_count} + 1`
-	fi
-done <<<"${read_successes}"
+read_successes=`grep -i "${READ_SUCCESS}" dbg.log | grep ${read_op_test1_key} | grep ${read_op_test1_value} 2>/dev/null`
+if [ "${read_successes}" ]
+then
+	while read success
+	do
+		time_of_this_success=`echo "${success}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
+		if [ "${time_of_this_success}" -ge "${read_op_test1_time}" -a "${time_of_this_success}" -lt "${read_op_test2_time}" ]
+		then
+			read_test1_success_count=`expr ${read_test1_success_count} + 1`
+		elif [ "${time_of_this_success}" -ge "${read_op_test2_time}" -a "${time_of_this_success}" -lt "${read_op_test3_part1_time}" ] 
+		then
+			read_test2_success_count=`expr ${read_test2_success_count} + 1`
+		elif [ "${time_of_this_success}" -ge "${read_op_test3_part2_time}" -a "${time_of_this_success}" -lt "${read_op_test4_time}" ]  
+		then
+			read_test3_part2_success_count=`expr ${read_test3_part2_success_count} + 1`
+		elif [ "${time_of_this_success}" -ge "${read_op_test4_time}" ]
+		then
+			read_test4_success_count=`expr ${read_test4_success_count} + 1`
+		fi
+	done <<<"${read_successes}"
+fi
 
 read_test3_part1_fail_count=0
 read_test5_fail_count=0
 
-read_fails=`grep -i "${READ_FAILURE}" dbg.log`
-while read fail
-do
-	time_of_this_fail=`echo "${fail}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
-	if [ "${time_of_this_fail}" -ge "${read_op_test3_part1_time}" -a "${time_of_this_fail}" -lt "${read_op_test3_part2_time}" ]
-	then
-		actual_key=`echo "${fail}" | grep "${read_op_test3_part1_key}" | wc -l`
-		if [ "${actual_key}"  -eq 1 ]
-		then	
-			read_test3_part1_fail_count=`expr ${read_test3_part1_fail_count} + 1`
-		fi
-	elif [ "${time_of_this_fail}" -ge "${read_op_test5_time}" ]
-	then
-		actual_key=`echo "${fail}" | grep "${INVALID_KEY}" | wc -l`
-		if [ "${actual_key}" -eq 1 ]
+read_fails=`grep -i "${READ_FAILURE}" dbg.log 2>/dev/null`
+if [ "${read_fails}" ]
+then
+	while read fail
+	do
+		time_of_this_fail=`echo "${fail}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
+		if [ "${time_of_this_fail}" -ge "${read_op_test3_part1_time}" -a "${time_of_this_fail}" -lt "${read_op_test3_part2_time}" ]
 		then
-			read_test5_fail_count=`expr ${read_test5_fail_count} + 1`
+			actual_key=`echo "${fail}" | grep "${read_op_test3_part1_key}" | wc -l`
+			if [ "${actual_key}"  -eq 1 ]
+			then	
+				read_test3_part1_fail_count=`expr ${read_test3_part1_fail_count} + 1`
+			fi
+		elif [ "${time_of_this_fail}" -ge "${read_op_test5_time}" ]
+		then
+			actual_key=`echo "${fail}" | grep "${INVALID_KEY}" | wc -l`
+			if [ "${actual_key}" -eq 1 ]
+			then
+				read_test5_fail_count=`expr ${read_test5_fail_count} + 1`
+			fi
 		fi
-	fi
-done <<<"${read_fails}"
+	done <<<"${read_fails}"
+fi
 
 if [ "${read_test1_success_count}" -eq "${QUORUMPLUSONE}" -o "${read_test1_success_count}" -eq "${RFPLUSONE}" ]
 then
@@ -499,48 +505,54 @@ update_test2_success_count=0
 update_test3_part2_success_count=0
 update_test4_success_count=0
 
-update_successes=`grep -i "${UPDATE_SUCCESS}" dbg.log | grep ${update_op_test1_key} | grep ${update_op_test1_value}`
-while read success
-do
-	time_of_this_success=`echo "${success}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
-	if [ "${time_of_this_success}" -ge "${update_op_test1_time}" -a "${time_of_this_success}" -lt "${update_op_test2_time}" ]
-	then
-		update_test1_success_count=`expr ${update_test1_success_count} + 1`
-	elif [ "${time_of_this_success}" -ge "${update_op_test2_time}" -a "${time_of_this_success}" -lt "${update_op_test3_part1_time}" ] 
-	then
-		update_test2_success_count=`expr ${update_test2_success_count} + 1`
-	elif [ "${time_of_this_success}" -ge "${update_op_test3_part2_time}" -a "${time_of_this_success}" -lt "${update_op_test4_time}" ]  
-	then
-		update_test3_part2_success_count=`expr ${update_test3_part2_success_count} + 1`
-	elif [ "${time_of_this_success}" -ge "${update_op_test4_time}" ]
-	then
-		update_test4_success_count=`expr ${update_test4_success_count} + 1`
-	fi
-done <<<"${update_successes}"
+update_successes=`grep -i "${UPDATE_SUCCESS}" dbg.log | grep ${update_op_test1_key} | grep ${update_op_test1_value} 2>/dev/null`
+if [ "${update_successes}" ]
+then
+	while read success
+	do
+		time_of_this_success=`echo "${success}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
+		if [ "${time_of_this_success}" -ge "${update_op_test1_time}" -a "${time_of_this_success}" -lt "${update_op_test2_time}" ]
+		then
+			update_test1_success_count=`expr ${update_test1_success_count} + 1`
+		elif [ "${time_of_this_success}" -ge "${update_op_test2_time}" -a "${time_of_this_success}" -lt "${update_op_test3_part1_time}" ] 
+		then
+			update_test2_success_count=`expr ${update_test2_success_count} + 1`
+		elif [ "${time_of_this_success}" -ge "${update_op_test3_part2_time}" -a "${time_of_this_success}" -lt "${update_op_test4_time}" ]  
+		then
+			update_test3_part2_success_count=`expr ${update_test3_part2_success_count} + 1`
+		elif [ "${time_of_this_success}" -ge "${update_op_test4_time}" ]
+		then
+			update_test4_success_count=`expr ${update_test4_success_count} + 1`
+		fi
+	done <<<"${update_successes}"
+fi
 
 update_test3_part1_fail_count=0
 update_test5_fail_count=0
 
-update_fails=`grep -i "${UPDATE_FAILURE}" dbg.log`
-while read fail
-do
-	time_of_this_fail=`echo "${fail}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
-	if [ "${time_of_this_fail}" -ge "${update_op_test3_part1_time}" -a "${time_of_this_fail}" -lt "${update_op_test3_part2_time}" ]
-	then
-		actual_key=`echo "${fail}" | grep "${update_op_test3_part1_key}" | wc -l`
-		if [ "${actual_key}"  -eq 1 ]
-		then	
-			update_test3_part1_fail_count=`expr ${update_test3_part1_fail_count} + 1`
-		fi
-	elif [ "${time_of_this_fail}" -ge "${update_op_test5_time}" ]
-	then
-		actual_key=`echo "${fail}" | grep "${INVALID_KEY}" | wc -l`
-		if [ "${actual_key}" -eq 1 ]
+update_fails=`grep -i "${UPDATE_FAILURE}" dbg.log 2>/dev/null`
+if [ "${update_fails}" ]
+then
+	while read fail
+	do
+		time_of_this_fail=`echo "${fail}" | cut -d" " -f2 | tr -s '[' ' ' | tr -s ']' ' '`
+		if [ "${time_of_this_fail}" -ge "${update_op_test3_part1_time}" -a "${time_of_this_fail}" -lt "${update_op_test3_part2_time}" ]
 		then
-			update_test5_fail_count=`expr ${update_test5_fail_count} + 1`
+			actual_key=`echo "${fail}" | grep "${update_op_test3_part1_key}" | wc -l`
+			if [ "${actual_key}"  -eq 1 ]
+			then	
+				update_test3_part1_fail_count=`expr ${update_test3_part1_fail_count} + 1`
+			fi
+		elif [ "${time_of_this_fail}" -ge "${update_op_test5_time}" ]
+		then
+			actual_key=`echo "${fail}" | grep "${INVALID_KEY}" | wc -l`
+			if [ "${actual_key}" -eq 1 ]
+			then
+				update_test5_fail_count=`expr ${update_test5_fail_count} + 1`
+			fi
 		fi
-	fi
-done <<<"${update_fails}"
+	done <<<"${update_fails}"
+fi
 
 if [ "${update_test1_success_count}" -eq "${QUORUMPLUSONE}" -o "${update_test1_success_count}" -eq "${RFPLUSONE}" ]
 then
