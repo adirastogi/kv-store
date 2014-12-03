@@ -373,7 +373,7 @@ vector<Node> MP2Node::findNodes(string key) {
 	return addr_vec;
 }
 
-
+/* Called everytime in the recvLoop to decrement transaction timers */
 void MP2Node::updateTransactionLog(){
 
     list<transaction>::iterator it=translog.begin();
@@ -543,9 +543,7 @@ void MP2Node::processReadReply(Message message){
             break;
         else mylog("unmatched transaction transid %d",it->gtransID);
     
-    //now we have for the key, its value and the info wheter the reply came
-    //from a primary,secondary copy
-    //not sure what to do with the replica for now
+    //now we have for the key, its value and the timestamp
     if(it==translog.end()){
         //The reply has come in too late and the transaction has been dropped
         //from the log. ignore the reply.
@@ -610,7 +608,7 @@ void MP2Node::multicastMessage(MyMessage message,vector<Node>& recipients){
     for (size_t i=0;i<recipients.size();++i)
         this->emulNet->ENsend(sendaddr,&(recipients[i].nodeAddress),msgstr,msglen);       
 }
-
+/* Send a unicast message */
 void MP2Node::unicastMessage(MyMessage message,Address& toaddr){
     Address* sendaddr = &(this->memberNode->addr);
     string strrep = message.toString();
@@ -632,8 +630,6 @@ void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
-    /* Stabilization needed for the case when a Node dies. When a node dies then its key 
-    must be replicated on the immediate successor and predecessor in the list ? */
     int i=0;
     for (i=0;i<ring.size();++i){
         if((ring[i].nodeAddress==this->memberNode->addr))
@@ -646,6 +642,7 @@ void MP2Node::stabilizationProtocol() {
     int n_1 = (i+1)%ring.size();
     int n_2 = (i+2)%ring.size();
     if(!inited){
+        /* first time invocation, just update the neighbours, you dont want to detect failure when just joining */
         mylog("Created the member tables initially at ring pos %s",ring[i].nodeAddress.getAddress().c_str());
         haveReplicasOf.push_back(ring[p_2]);
         haveReplicasOf.push_back(ring[p_1]);

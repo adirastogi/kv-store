@@ -34,6 +34,7 @@
  * 				4) Client side CRUD APIs
  */
 
+/* Custom message wrapper needed for replicate messages */
 class MyMessage:public Message{
     public:
     enum MyMessageType{ REPUPDATE,QUERY };
@@ -45,12 +46,12 @@ class MyMessage:public Message{
     MyMessageType msgType;
 };
 
-/* Custom class implementations that will be used in MP2Node*/
+/* Custom class implementation for storing transaction info that will be used in MP2Node*/
 struct transaction{
     public:
     int gtransID;       //globally unique transaction ID
     int local_ts;      //local TS at node when transaction was initiated
-    int quorum_count;   //represents the numeber of nodes need to achieve quorum
+    int quorum_count;   //represents the number of nodes need to achieve quorum
     MessageType trans_type; //type of transaction requested
     string key;         //the key associated with the transaction
     pair<int,string> latest_val; //value of the key received with the latest timestamp.
@@ -63,6 +64,7 @@ struct transaction{
     latest_val(0,value){
     } 
 };
+/* custom map */
 typedef std::map<string,Entry> KeyMap;
 /* Custom class implementations that will be used in MP2Node*/
 
