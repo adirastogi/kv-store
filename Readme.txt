@@ -1,9 +1,13 @@
-Read the specification document thoroughly at: https://courses.engr.illinois.edu/cs425/fa2014/assignments.html
+Implemenation of CRUD and stabilization operations in a distributed key-value store. Uses a quorum
+consus based approach to implement the CRUD operations and a custom stabilization protocol to 
+make the system fault tolerant in case of failures
 
-Create a high level design covering all scenarios / test cases before you start coding. 
+Authors
+CRUD ops implemeation and stabilization protocol implementation (MP2Node.h/.cpp) by Aditya Rastogi
+Other parts of code - infrastructure, test cases and graders provided by instructors for the CS425
+course at the University of Illinois at Urbana-Champaign
 
-How do I run only the CRUD tests ? 
-
+To run only the CRUD tests
 $ make clean
 $ make
 $ ./Application ./testcases/create.conf
@@ -14,5 +18,5 @@ $ ./Application ./testcases/read.conf
 or
 $ ./Application ./testcases/update.conf
 
-How do I test if my code passes all the test cases ? 
+To test all the test cases
 Run the grader. Check the run procedure in KVStoreGrader.sh
